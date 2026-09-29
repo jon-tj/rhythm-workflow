@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rhythm</title>
+  <meta name="description" content="A personal work-rhythm app: focus blocks, movement breaks, spaced repetition and focus tracking.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..500,0..1,0&display=block">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav id="nav" class="nav">
+    <div class="brand"><span class="ms">motion_mode</span><span>Rhythm</span></div>
+    <a href="#/today" data-route="today"><span class="ms">today</span><span>Today</span></a>
+    <a href="#/projects" data-route="projects"><span class="ms">folder</span><span>Projects</span></a>
+    <a href="#/cards" data-route="cards"><span class="ms">style</span><span>Cards</span></a>
+    <a href="#/stats" data-route="stats"><span class="ms">insights</span><span>Stats</span></a>
+    <a href="#/settings" data-route="settings"><span class="ms">settings</span><span>Settings</span></a>
+    <div id="session-pill"></div>
+  </nav>
+  <main id="view" class="view"></main>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <canvas id="confetti"></canvas>
+
+  <script src="js/util.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/images.js"></script>
+  <script src="js/srs.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/confetti.js"></script>
+  <script src="js/session.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
