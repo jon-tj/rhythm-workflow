@@ -9,6 +9,7 @@ function mountCanvas(container, projectId) {
   let saveTimer;
   const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 300); };
   let activeTool = null;
+  let lastShapeClick = null;
 
   const world = h('div', { class: 'cv-world' });
   const zoomLabel = h('span', { class: 'cv-zoom' });
@@ -197,6 +198,7 @@ function mountCanvas(container, projectId) {
     if (it.h != null) style.height = it.h + 'px';
     if (it.angle != null) style['--shape-angle'] = it.angle + 'deg';
     const el = h('div', { class: `cv-item cv-${it.type}`, style });
+    el.dataset.itemId = it.id;
     const del = h('button', { class: 'cv-del', title: 'Delete', onclick: () => removeItem(it, el) }, icon('close'));
     const resize = h('div', { class: 'cv-resize' });
 
@@ -269,23 +271,49 @@ function mountCanvas(container, projectId) {
   function dragBy(handle, el, it) {
     handle.addEventListener('pointerdown', e => {
       if (e.target.closest('button')) return;
+      if (it.type === 'shape' && lastShapeClick && lastShapeClick.id === it.id &&
+          Date.now() - lastShapeClick.time < 500 && Math.hypot(e.clientX - lastShapeClick.x, e.clientY - lastShapeClick.y) < 18) {
+        e.preventDefault();
+        e.stopPropagation();
+        lastShapeClick = null;
+        const point = toWorld(e.clientX, e.clientY);
+        addNote('', point.x, point.y, true);
+        return;
+      }
       e.stopPropagation(); e.preventDefault();
       const sx = e.clientX, sy = e.clientY, ox = it.x, oy = it.y;
+      let moved = false;
+      const moving = [{ item: it, el, x: ox, y: oy }];
+      if (it.type === 'shape' && it.shape === 'box') {
+        board.items.forEach(candidate => {
+          if (candidate === it || !isContainedByBox(candidate, it)) return;
+          const candidateEl = world.querySelector(`[data-item-id="${candidate.id}"]`);
+          if (candidateEl) moving.push({ item: candidate, el: candidateEl, x: candidate.x, y: candidate.y });
+        });
+      }
       el.classList.add('dragging');
-      world.append(el); // bring to front
       wrap.setPointerCapture(e.pointerId);
-      const idx = board.items.indexOf(it);
-      board.items.splice(idx, 1); board.items.push(it);
+      const movingByItem = new Map(moving.map(entry => [entry.item, entry]));
+      const movingOrder = board.items.filter(item => movingByItem.has(item));
+      board.items = board.items.filter(item => !movingByItem.has(item)).concat(movingOrder);
+      movingOrder.forEach(item => world.append(movingByItem.get(item).el));
       const move = ev => {
-        it.x = ox + (ev.clientX - sx) / view.z; it.y = oy + (ev.clientY - sy) / view.z;
-        el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 4) moved = true;
+        const dx = (ev.clientX - sx) / view.z, dy = (ev.clientY - sy) / view.z;
+        moving.forEach(({ item, el: movingEl, x, y }) => {
+          item.x = x + dx; item.y = y + dy;
+          movingEl.style.left = item.x + 'px'; movingEl.style.top = item.y + 'px';
+        });
       };
-      const finish = () => {
+      const finish = ev => {
         wrap.removeEventListener('pointermove', move);
         wrap.removeEventListener('pointerup', finish);
         wrap.removeEventListener('pointercancel', finish);
         wrap.removeEventListener('lostpointercapture', finish);
         el.classList.remove('dragging');
+        if (it.type === 'shape' && !moved && ev.type === 'pointerup') {
+          lastShapeClick = { id: it.id, time: Date.now(), x: sx, y: sy };
+        }
         saveSoon();
       };
       wrap.addEventListener('pointermove', move);
@@ -293,6 +321,18 @@ function mountCanvas(container, projectId) {
       wrap.addEventListener('pointercancel', finish, { once: true });
       wrap.addEventListener('lostpointercapture', finish, { once: true });
     });
+  }
+
+  function isContainedByBox(item, box) {
+    const left = box.x, top = box.y, right = box.x + box.w, bottom = box.y + box.h;
+    if (item.type === 'stamp' || (item.type === 'shape' && item.shape === 'arrow')) {
+      return item.x + item.w / 2 >= left && item.x + item.w / 2 <= right &&
+        item.y + item.h / 2 >= top && item.y + item.h / 2 <= bottom;
+    }
+    const itemEl = world.querySelector(`[data-item-id="${item.id}"]`);
+    const width = itemEl ? itemEl.offsetWidth : item.w || 0;
+    const height = itemEl ? itemEl.offsetHeight : item.h || 0;
+    return item.x >= left && item.y >= top && item.x + width <= right && item.y + height <= bottom;
   }
 
   function sendToBack(it, el) {
