@@ -294,7 +294,8 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-handle { height: 26px; cursor: move; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; color: rgba(0,0,0,.3); touch-action: none; }
 @media (prefers-color-scheme: dark) { .cv-handle { color: rgba(255,255,255,.3); } }
 .cv-handle .ms { font-size: 18px; transform: rotate(90deg); }
-.cv-note-colors { display: flex; align-items: center; gap: 4px; }
+.cv-note-colors { display: flex; align-items: center; gap: 4px; opacity: 0; visibility: hidden; transition: opacity .12s; }
+.cv-note:hover .cv-note-colors, .cv-note:focus-within .cv-note-colors { opacity: 1; visibility: visible; }
 .cv-note-color { width: 13px; height: 13px; padding: 0; border: 1px solid rgba(0,0,0,.2); border-radius: 50%; cursor: pointer; }
 .cv-note-color[data-color="yellow"] { background: #f4d96b; }
 .cv-note-color[data-color="rose"] { background: #ed91a6; }
@@ -303,6 +304,38 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-note-color[data-color="lavender"] { background: #b79be8; }
 .cv-note-color[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
 .cv-note-color:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.cv-wrap.tool-active { cursor: crosshair; }
+.cv-toolgroup { position: relative; }
+.cv-toolgroup.open > .icon-btn { background: var(--primary-soft); color: var(--on-primary-soft); }
+.cv-toolmenu {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); display: none; gap: 4px;
+  padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); z-index: 5;
+}
+.cv-toolgroup.open .cv-toolmenu { display: flex; }
+.cv-tool-option {
+  display: grid; place-items: center; width: 38px; height: 38px; flex: none; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink-2); cursor: pointer; font: 24px/1 sans-serif;
+}
+.cv-tool-option:hover, .cv-tool-option.selected { background: var(--primary-soft); color: var(--on-primary-soft); }
+.cv-tool-option .ms { font-size: 21px; }
+.cv-stamp-face { display: grid; width: 100%; height: 100%; place-items: center; font: 52px/1 sans-serif; cursor: move; user-select: none; touch-action: none; }
+.cv-shape-face { position: absolute; inset: 0; cursor: move; touch-action: none; }
+.cv-shape-box { border: 3px solid var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.cv-shape-circle { border: 3px solid var(--primary); border-radius: 50%; background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.cv-shape-triangle { background: color-mix(in srgb, var(--primary) 65%, transparent); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.cv-shape-line { inset: 0; height: 100%; }
+.cv-shape-line::before {
+  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--primary); content: ''; transform: translateY(-50%) rotate(var(--shape-angle));
+}
+.cv-shape-line::before { transform-origin: center; }
+.cv-shape-arrow { inset: 0; height: 100%; transform: rotate(var(--shape-angle)); }
+.cv-shape-arrow::before {
+  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--primary); content: ''; transform: translateY(-50%);
+}
+.cv-shape-arrow::after {
+  position: absolute; right: 0; top: 50%; width: 14px; height: 14px; background: var(--primary);
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 24% 50%); content: ''; transform: translateY(-50%);
+}
 .cv-image { background: var(--surface); }
 .cv-image img { display: block; width: 100%; height: auto; border-radius: inherit; cursor: move; touch-action: none; user-select: none; }
 .cv-image.missing { min-height: 80px; }
@@ -312,7 +345,7 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 }
 .cv-del .ms { font-size: 16px; }
 .cv-item:hover .cv-del { display: grid; }
-.cv-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none;
+.cv-resize { position: absolute; z-index: 2; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none;
   background: linear-gradient(135deg, transparent 50%, rgba(127,127,127,.5) 50%); border-bottom-right-radius: 12px; }
 .cv-tools {
   position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px;

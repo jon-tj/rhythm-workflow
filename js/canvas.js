@@ -8,9 +8,22 @@ function mountCanvas(container, projectId) {
 
   let saveTimer;
   const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 300); };
+  let activeTool = null;
 
   const world = h('div', { class: 'cv-world' });
   const zoomLabel = h('span', { class: 'cv-zoom' });
+  const hint = h('div', { class: 'cv-hint' }, 'Paste text or images · drag to pan · Ctrl+scroll to zoom');
+  const stampChoices = [
+    { label: 'Star', emoji: '⭐' }, { label: 'Heart', emoji: '❤️' },
+    { label: 'Laughing', emoji: '😂' }, { label: 'Happy', emoji: '😊' }, { label: 'Mad', emoji: '😡' },
+  ];
+  const drawChoices = [
+    { label: 'Box', shape: 'box', icon: 'crop_square' },
+    { label: 'Circle', shape: 'circle', icon: 'circle' },
+    { label: 'Triangle', shape: 'triangle', icon: 'change_history' },
+    { label: 'Line', shape: 'line', icon: 'horizontal_rule' },
+    { label: 'Arrow', shape: 'arrow', icon: 'arrow_right_alt' },
+  ];
   const wrap = h('div', { class: 'cv-wrap', tabindex: '-1' },
     world,
     h('div', { class: 'cv-tools' },
@@ -18,13 +31,59 @@ function mountCanvas(container, projectId) {
       h('label', { class: 'icon-btn', title: 'Add image' }, icon('add_photo_alternate'),
         h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true,
           onchange: e => { const c = centerWorld(); [...e.target.files].forEach((f, i) => addImage(f, c.x + i * 30, c.y + i * 30)); e.target.value = ''; } })),
+      toolGroup('add_reaction', 'Emoji stamps', stampChoices.map(choice => ({
+        label: choice.label, content: choice.emoji, tool: { type: 'stamp', emoji: choice.emoji },
+      }))),
+      toolGroup('shapes', 'Shapes and lines', drawChoices.map(choice => ({
+        label: choice.label, content: icon(choice.icon), tool: { type: 'shape', shape: choice.shape },
+      }))),
       h('span', { class: 'sep' }),
       h('button', { class: 'icon-btn', title: 'Zoom out', onclick: () => zoomAt(1 / 1.2) }, icon('remove')),
       zoomLabel,
       h('button', { class: 'icon-btn', title: 'Zoom in', onclick: () => zoomAt(1.2) }, icon('add')),
       h('button', { class: 'icon-btn', title: 'Reset view', onclick: () => { Object.assign(view, { x: 40, y: 40, z: 1 }); applyView(); } }, icon('center_focus_strong'))),
-    h('div', { class: 'cv-hint' }, 'Paste text or images · drag to pan · Ctrl+scroll to zoom'));
+    hint);
   container.append(wrap);
+
+  function toolGroup(iconName, label, choices) {
+    const group = h('div', { class: 'cv-toolgroup' });
+    const panel = h('div', { class: 'cv-toolmenu', role: 'group', 'aria-label': label },
+      ...choices.map(choice => h('button', {
+        class: 'cv-tool-option', type: 'button', title: choice.label, 'aria-label': choice.label,
+        onclick: e => activateTool(choice, e.currentTarget),
+      }, choice.content)));
+    const trigger = h('button', {
+      class: 'icon-btn', type: 'button', title: label, 'aria-label': label, 'aria-expanded': 'false',
+      onclick: () => {
+        const opening = !group.classList.contains('open');
+        wrap.querySelectorAll('.cv-toolgroup').forEach(item => item.classList.remove('open'));
+        group.classList.toggle('open', opening);
+        trigger.setAttribute('aria-expanded', String(opening));
+      },
+    }, icon(iconName));
+    group.append(trigger, panel);
+    return group;
+  }
+
+  function activateTool(choice, button) {
+    activeTool = choice.tool;
+    wrap.classList.add('tool-active');
+    hint.textContent = choice.tool.type === 'stamp'
+      ? `Click canvas to place ${choice.label.toLowerCase()} · Esc to pan`
+      : `Drag on canvas to draw ${choice.label.toLowerCase()} · Esc to pan`;
+    wrap.querySelectorAll('.cv-toolgroup').forEach(item => item.classList.remove('open'));
+    wrap.querySelectorAll('.cv-tool-option').forEach(item => item.classList.toggle('selected', item === button));
+  }
+
+  function clearActiveTool() {
+    activeTool = null;
+    wrap.classList.remove('tool-active');
+    hint.textContent = 'Paste text or images · drag to pan · Ctrl+scroll to zoom';
+    wrap.querySelectorAll('.cv-tool-option').forEach(item => item.classList.remove('selected'));
+  }
+
+  const onCanvasKeydown = e => { if (e.key === 'Escape' && activeTool) clearActiveTool(); };
+  document.addEventListener('keydown', onCanvasKeydown);
 
   function applyView() {
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
@@ -56,6 +115,13 @@ function mountCanvas(container, projectId) {
   // ---- pan ----
   wrap.addEventListener('pointerdown', e => {
     if (e.target !== wrap && e.target !== world) return;
+    if (activeTool) {
+      e.preventDefault();
+      const point = toWorld(e.clientX, e.clientY);
+      if (activeTool.type === 'stamp') addStamp(activeTool.emoji, point.x - 32, point.y - 32);
+      else startShapeDraw(activeTool.shape, point, e.pointerId);
+      return;
+    }
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y;
     wrap.setPointerCapture(e.pointerId);
@@ -65,6 +131,43 @@ function mountCanvas(container, projectId) {
     wrap.addEventListener('pointermove', move);
     wrap.addEventListener('pointerup', up, { once: true });
   });
+
+  function startShapeDraw(shape, start, pointerId) {
+    const it = { id: uid(), type: 'shape', shape, x: start.x, y: start.y, w: 1, h: 1, angle: 0 };
+    board.items.push(it);
+    const el = renderItem(it);
+    wrap.setPointerCapture(pointerId);
+    const move = e => {
+      const end = toWorld(e.clientX, e.clientY);
+      if (shape === 'line' || shape === 'arrow') {
+        const dx = end.x - start.x, dy = end.y - start.y;
+        it.w = Math.max(8, Math.hypot(dx, dy));
+        it.h = 28;
+        it.x = (start.x + end.x) / 2 - it.w / 2;
+        it.y = (start.y + end.y) / 2 - it.h / 2;
+        it.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      } else {
+        it.x = Math.min(start.x, end.x);
+        it.y = Math.min(start.y, end.y);
+        it.w = Math.max(8, Math.abs(end.x - start.x));
+        it.h = Math.max(8, Math.abs(end.y - start.y));
+      }
+      el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
+      el.style.width = it.w + 'px'; el.style.height = it.h + 'px';
+      el.style.setProperty('--shape-angle', it.angle + 'deg');
+    };
+    const finish = () => {
+      wrap.removeEventListener('pointermove', move);
+      wrap.removeEventListener('pointerup', finish);
+      wrap.removeEventListener('pointercancel', finish);
+      wrap.removeEventListener('lostpointercapture', finish);
+      saveSoon();
+    };
+    wrap.addEventListener('pointermove', move);
+    wrap.addEventListener('pointerup', finish, { once: true });
+    wrap.addEventListener('pointercancel', finish, { once: true });
+    wrap.addEventListener('lostpointercapture', finish, { once: true });
+  }
   wrap.addEventListener('dblclick', e => {
     if (e.target !== wrap && e.target !== world) return;
     const p = toWorld(e.clientX, e.clientY);
@@ -80,7 +183,10 @@ function mountCanvas(container, projectId) {
   const noteColors = ['yellow', 'rose', 'blue', 'green', 'lavender'];
 
   function renderItem(it) {
-    const el = h('div', { class: `cv-item cv-${it.type}`, style: { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px' } });
+    const style = { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px' };
+    if (it.h != null) style.height = it.h + 'px';
+    if (it.angle != null) style['--shape-angle'] = it.angle + 'deg';
+    const el = h('div', { class: `cv-item cv-${it.type}`, style });
     const del = h('button', { class: 'cv-del', title: 'Delete', onclick: () => removeItem(it, el) }, icon('close'));
     const resize = h('div', { class: 'cv-resize' });
 
@@ -109,11 +215,20 @@ function mountCanvas(container, projectId) {
       requestAnimationFrame(grow);
       dragBy(handle, el, it);
       el._focus = () => ta.focus();
-    } else {
+    } else if (it.type === 'image') {
       const img = h('img', { alt: '', draggable: 'false' });
       Images.url(it.imageId).then(u => { if (u) img.src = u; else el.classList.add('missing'); });
       el.append(img, del, resize);
       dragBy(img, el, it);
+    } else if (it.type === 'stamp') {
+      const face = h('div', { class: 'cv-stamp-face', 'aria-label': `${it.emoji} stamp` }, it.emoji);
+      face.style.fontSize = it.w * 0.82 + 'px';
+      el.append(face, del, resize);
+      dragBy(face, el, it);
+    } else if (it.type === 'shape') {
+      const face = h('div', { class: `cv-shape-face cv-shape-${it.shape}` });
+      el.append(face, del, resize);
+      dragBy(face, el, it);
     }
     resizeBy(resize, el, it);
     world.append(el);
@@ -152,12 +267,29 @@ function mountCanvas(container, projectId) {
   function resizeBy(grip, el, it) {
     grip.addEventListener('pointerdown', e => {
       e.stopPropagation(); e.preventDefault();
-      const sx = e.clientX, ow = it.w;
-      grip.setPointerCapture(e.pointerId);
-      const move = ev => { it.w = Math.max(120, ow + (ev.clientX - sx) / view.z); el.style.width = it.w + 'px'; };
-      const up = () => { grip.removeEventListener('pointermove', move); saveSoon(); };
-      grip.addEventListener('pointermove', move);
-      grip.addEventListener('pointerup', up, { once: true });
+      const sx = e.clientX, sy = e.clientY, ow = it.w, oh = it.h;
+      wrap.setPointerCapture(e.pointerId);
+      const move = ev => {
+        it.w = Math.max(40, ow + (ev.clientX - sx) / view.z);
+        el.style.width = it.w + 'px';
+        if (it.type === 'stamp') {
+          it.h = it.w; el.style.height = it.h + 'px';
+          el.querySelector('.cv-stamp-face').style.fontSize = it.w * 0.82 + 'px';
+        } else if (it.type === 'shape' && it.shape !== 'line' && it.shape !== 'arrow') {
+          it.h = Math.max(40, oh + (ev.clientY - sy) / view.z); el.style.height = it.h + 'px';
+        }
+      };
+      const finish = () => {
+        wrap.removeEventListener('pointermove', move);
+        wrap.removeEventListener('pointerup', finish);
+        wrap.removeEventListener('pointercancel', finish);
+        wrap.removeEventListener('lostpointercapture', finish);
+        saveSoon();
+      };
+      wrap.addEventListener('pointermove', move);
+      wrap.addEventListener('pointerup', finish, { once: true });
+      wrap.addEventListener('pointercancel', finish, { once: true });
+      wrap.addEventListener('lostpointercapture', finish, { once: true });
     });
   }
 
@@ -176,6 +308,13 @@ function mountCanvas(container, projectId) {
     if (focus) setTimeout(() => el._focus && el._focus(), 20);
   }
   function addNoteAtCenter(text) { const c = centerWorld(); addNote(text, c.x, c.y, !text); }
+
+  function addStamp(emoji, x, y) {
+    const it = { id: uid(), type: 'stamp', emoji, x, y, w: 64, h: 64 };
+    board.items.push(it);
+    renderItem(it);
+    save();
+  }
 
   async function addImage(file, x, y) {
     try {
@@ -231,5 +370,10 @@ function mountCanvas(container, projectId) {
   board.items.forEach(renderItem);
   applyView();
 
-  return () => { document.removeEventListener('paste', onPaste); clearTimeout(saveTimer); save(); };
+  return () => {
+    document.removeEventListener('paste', onPaste);
+    document.removeEventListener('keydown', onCanvasKeydown);
+    clearTimeout(saveTimer);
+    save();
+  };
 }
