@@ -312,8 +312,23 @@ function mountCanvas(container, projectId) {
 
   function renderList(it, el, del, resize) {
     if (!Array.isArray(it.rows) || !it.rows.length) it.rows = [{ text: '', marker: 'circle' }];
+    if (!noteColors.includes(it.color)) it.color = 'white';
+    el.dataset.color = it.color;
     const handle = h('div', { class: 'cv-handle cv-list-handle' }, icon('drag_indicator'), h('strong', {}, 'List'));
     const rowsEl = h('div', { class: 'cv-list-rows' });
+    const colors = h('div', { class: 'cv-item-colors', role: 'group', 'aria-label': 'List color' },
+      ...noteColors.map(color => h('button', {
+        class: 'cv-note-color', type: 'button', title: `${color} list color`, 'aria-label': `${color} list color`,
+        'aria-pressed': String(it.color === color), 'data-color': color,
+        onclick: e => {
+          e.stopPropagation();
+          it.color = color;
+          el.dataset.color = color;
+          colors.querySelectorAll('.cv-note-color').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
+          saveSoon();
+        },
+      })));
+    const controls = h('div', { class: 'cv-item-controls' }, colors, del);
     const addRow = (afterRow, shouldFocus, marker = 'circle') => {
       const row = { text: '', marker };
       const index = afterRow ? it.rows.indexOf(afterRow) + 1 : it.rows.length;
@@ -328,7 +343,7 @@ function mountCanvas(container, projectId) {
         addRow(last, true, last.marker === 'number' ? 'number' : 'circle');
       },
     }, icon('add'));
-    el.append(handle, rowsEl, addButton, del, resize);
+    el.append(handle, rowsEl, addButton, controls, resize);
     renderListRows(it, rowsEl, addRow);
     dragBy(handle, el, it);
   }
@@ -517,7 +532,7 @@ function mountCanvas(container, projectId) {
 
   function addListAtCenter() {
     const point = centerWorld();
-    const it = { id: uid(), type: 'list', x: point.x, y: point.y, w: 280, rows: [{ text: '', marker: 'circle' }] };
+    const it = { id: uid(), type: 'list', x: point.x, y: point.y, w: 280, color: 'white', rows: [{ text: '', marker: 'circle' }] };
     board.items.push(it);
     const el = renderItem(it);
     save();
