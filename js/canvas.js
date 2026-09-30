@@ -68,6 +68,7 @@ function mountCanvas(container, projectId) {
   function activateTool(choice, button) {
     activeTool = choice.tool;
     wrap.classList.add('tool-active');
+    wrap.classList.toggle('stamp-active', choice.tool.type === 'stamp');
     hint.textContent = choice.tool.type === 'stamp'
       ? `Click canvas to place ${choice.label.toLowerCase()} · Esc to pan`
       : `Drag on canvas to draw ${choice.label.toLowerCase()} · Esc to pan`;
@@ -78,12 +79,22 @@ function mountCanvas(container, projectId) {
   function clearActiveTool() {
     activeTool = null;
     wrap.classList.remove('tool-active');
+    wrap.classList.remove('stamp-active');
     hint.textContent = 'Paste text or images · drag to pan · Ctrl+scroll to zoom';
     wrap.querySelectorAll('.cv-tool-option').forEach(item => item.classList.remove('selected'));
   }
 
   const onCanvasKeydown = e => { if (e.key === 'Escape' && activeTool) clearActiveTool(); };
   document.addEventListener('keydown', onCanvasKeydown);
+
+  const onStampPointerDown = e => {
+    if (activeTool?.type !== 'stamp' || e.target.closest('.cv-del') || e.target.closest('.cv-tools')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const point = toWorld(e.clientX, e.clientY);
+    addStamp(activeTool.emoji, point.x - 32, point.y - 32);
+  };
+  wrap.addEventListener('pointerdown', onStampPointerDown, true);
 
   function applyView() {
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
@@ -118,8 +129,7 @@ function mountCanvas(container, projectId) {
     if (activeTool) {
       e.preventDefault();
       const point = toWorld(e.clientX, e.clientY);
-      if (activeTool.type === 'stamp') addStamp(activeTool.emoji, point.x - 32, point.y - 32);
-      else startShapeDraw(activeTool.shape, point, e.pointerId);
+      startShapeDraw(activeTool.shape, point, e.pointerId);
       return;
     }
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -193,9 +203,7 @@ function mountCanvas(container, projectId) {
     if (it.type === 'note') {
       if (!noteColors.includes(it.color)) it.color = 'yellow';
       el.dataset.color = it.color;
-      const handle = h('div', { class: 'cv-handle' },
-        icon('drag_indicator'),
-        h('div', { class: 'cv-note-colors', role: 'group', 'aria-label': 'Note color' },
+      const colors = h('div', { class: 'cv-item-colors', role: 'group', 'aria-label': 'Note color' },
           ...noteColors.map(color => h('button', {
             class: 'cv-note-color', type: 'button', title: `${color} note color`, 'aria-label': `${color} note color`,
             'aria-pressed': String(it.color === color), 'data-color': color,
@@ -203,15 +211,16 @@ function mountCanvas(container, projectId) {
               e.stopPropagation();
               it.color = color;
               el.dataset.color = color;
-              handle.querySelectorAll('.cv-note-color').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
+              colors.querySelectorAll('.cv-note-color').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
               saveSoon();
             },
-          })))
-      );
+          })));
+      const controls = h('div', { class: 'cv-item-controls' }, colors, del);
+      const handle = h('div', { class: 'cv-handle' }, icon('drag_indicator'));
       const ta = h('textarea', { placeholder: 'Write something…', value: it.text });
       const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
       ta.addEventListener('input', () => { it.text = ta.value; grow(); saveSoon(); });
-      el.append(handle, ta, del, resize);
+      el.append(handle, ta, controls, resize);
       requestAnimationFrame(grow);
       dragBy(handle, el, it);
       el._focus = () => ta.focus();
@@ -226,8 +235,30 @@ function mountCanvas(container, projectId) {
       el.append(face, del, resize);
       dragBy(face, el, it);
     } else if (it.type === 'shape') {
+      if (!noteColors.includes(it.color)) it.color = 'blue';
+      el.dataset.color = it.color;
       const face = h('div', { class: `cv-shape-face cv-shape-${it.shape}` });
-      el.append(face, del, resize);
+      const colors = h('div', { class: 'cv-item-colors', role: 'group', 'aria-label': 'Shape color' },
+          ...noteColors.map(color => h('button', {
+            class: 'cv-note-color', type: 'button', title: `${color} shape color`, 'aria-label': `${color} shape color`,
+            'aria-pressed': String(it.color === color), 'data-color': color,
+            onclick: e => {
+              e.stopPropagation();
+              it.color = color;
+              el.dataset.color = color;
+              colors.querySelectorAll('.cv-note-color').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
+              saveSoon();
+            },
+          })));
+      const controls = h('div', { class: 'cv-item-controls' },
+        h('button', {
+          class: 'cv-shape-back', type: 'button', title: 'Send to back', 'aria-label': 'Send to back',
+          onclick: e => { e.stopPropagation(); sendToBack(it, el); },
+        }, icon('vertical_align_bottom')),
+        colors,
+        del
+      );
+      el.append(face, controls, resize);
       dragBy(face, el, it);
     }
     resizeBy(resize, el, it);
@@ -237,7 +268,7 @@ function mountCanvas(container, projectId) {
 
   function dragBy(handle, el, it) {
     handle.addEventListener('pointerdown', e => {
-      if (e.target.closest('.cv-note-color')) return;
+      if (e.target.closest('button')) return;
       e.stopPropagation(); e.preventDefault();
       const sx = e.clientX, sy = e.clientY, ox = it.x, oy = it.y;
       el.classList.add('dragging');
@@ -262,6 +293,16 @@ function mountCanvas(container, projectId) {
       wrap.addEventListener('pointercancel', finish, { once: true });
       wrap.addEventListener('lostpointercapture', finish, { once: true });
     });
+  }
+
+  function sendToBack(it, el) {
+    const index = board.items.indexOf(it);
+    if (index > 0) {
+      board.items.splice(index, 1);
+      board.items.unshift(it);
+      world.insertBefore(el, world.firstChild);
+      saveSoon();
+    }
   }
 
   function resizeBy(grip, el, it) {
@@ -373,6 +414,7 @@ function mountCanvas(container, projectId) {
   return () => {
     document.removeEventListener('paste', onPaste);
     document.removeEventListener('keydown', onCanvasKeydown);
+    wrap.removeEventListener('pointerdown', onStampPointerDown, true);
     clearTimeout(saveTimer);
     save();
   };

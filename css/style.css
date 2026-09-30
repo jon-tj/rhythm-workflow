@@ -294,9 +294,18 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-handle { height: 26px; cursor: move; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; color: rgba(0,0,0,.3); touch-action: none; }
 @media (prefers-color-scheme: dark) { .cv-handle { color: rgba(255,255,255,.3); } }
 .cv-handle .ms { font-size: 18px; transform: rotate(90deg); }
-.cv-note-colors { display: flex; align-items: center; gap: 4px; opacity: 0; visibility: hidden; transition: opacity .12s; }
-.cv-note:hover .cv-note-colors, .cv-note:focus-within .cv-note-colors { opacity: 1; visibility: visible; }
-.cv-note-color { width: 13px; height: 13px; padding: 0; border: 1px solid rgba(0,0,0,.2); border-radius: 50%; cursor: pointer; }
+.cv-item-controls {
+  position: absolute; z-index: 4; top: -14px; right: -12px; display: flex; align-items: center; gap: 5px;
+  padding: 3px 0 3px 6px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transition: opacity .12s;
+}
+.cv-item:hover .cv-item-controls { opacity: 1; visibility: visible; }
+.cv-item-controls .cv-del {
+  position: static; display: grid; width: 30px; height: 30px; flex: none; border-radius: 50%;
+  background: #d83b3b; color: #fff; margin: 0;
+}
+.cv-item-controls .cv-del:hover { background: #bd2828; }
+.cv-note-color { width: 14px; height: 14px; padding: 0; border: 1px solid rgba(0,0,0,.2); border-radius: 50%; cursor: pointer; }
 .cv-note-color[data-color="yellow"] { background: #f4d96b; }
 .cv-note-color[data-color="rose"] { background: #ed91a6; }
 .cv-note-color[data-color="blue"] { background: #82b8e8; }
@@ -305,6 +314,9 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-note-color[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
 .cv-note-color:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cv-wrap.tool-active { cursor: crosshair; }
+.cv-wrap.stamp-active, .cv-wrap.stamp-active .cv-item, .cv-wrap.stamp-active .cv-item * { cursor: copy !important; }
+.cv-wrap.stamp-active .cv-item-controls button, .cv-wrap.stamp-active .cv-del { cursor: pointer !important; }
+.cv-wrap.stamp-active .cv-tools, .cv-wrap.stamp-active .cv-tools * { cursor: pointer; }
 .cv-toolgroup { position: relative; }
 .cv-toolgroup.open > .icon-btn { background: var(--primary-soft); color: var(--on-primary-soft); }
 .cv-toolmenu {
@@ -320,22 +332,39 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-tool-option .ms { font-size: 21px; }
 .cv-stamp-face { display: grid; width: 100%; height: 100%; place-items: center; font: 52px/1 sans-serif; cursor: move; user-select: none; touch-action: none; }
 .cv-shape-face { position: absolute; inset: 0; cursor: move; touch-action: none; }
-.cv-shape-box { border: 3px solid var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
-.cv-shape-circle { border: 3px solid var(--primary); border-radius: 50%; background: color-mix(in srgb, var(--primary) 12%, transparent); }
-.cv-shape-triangle { background: color-mix(in srgb, var(--primary) 65%, transparent); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.cv-shape { --shape-ink: #438bd0; }
+.cv-shape[data-color="yellow"] { --shape-ink: #c59d16; }
+.cv-shape[data-color="rose"] { --shape-ink: #d45c78; }
+.cv-shape[data-color="blue"] { --shape-ink: #438bd0; }
+.cv-shape[data-color="green"] { --shape-ink: #4a9b59; }
+.cv-shape[data-color="lavender"] { --shape-ink: #8b67c9; }
+.cv-shape-box { border: 3px solid var(--shape-ink); background: color-mix(in srgb, var(--shape-ink) 12%, transparent); }
+.cv-shape-circle { border: 3px solid var(--shape-ink); border-radius: 50%; background: color-mix(in srgb, var(--shape-ink) 12%, transparent); }
+.cv-shape-triangle { background: color-mix(in srgb, var(--shape-ink) 65%, transparent); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .cv-shape-line { inset: 0; height: 100%; }
 .cv-shape-line::before {
-  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--primary); content: ''; transform: translateY(-50%) rotate(var(--shape-angle));
+  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--shape-ink); content: ''; transform: translateY(-50%) rotate(var(--shape-angle));
 }
 .cv-shape-line::before { transform-origin: center; }
 .cv-shape-arrow { inset: 0; height: 100%; transform: rotate(var(--shape-angle)); }
 .cv-shape-arrow::before {
-  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--primary); content: ''; transform: translateY(-50%);
+  position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--shape-ink); content: ''; transform: translateY(-50%);
 }
 .cv-shape-arrow::after {
-  position: absolute; right: 0; top: 50%; width: 14px; height: 14px; background: var(--primary);
+  position: absolute; right: 0; top: 50%; width: 14px; height: 14px; background: var(--shape-ink);
   clip-path: polygon(0 0, 100% 50%, 0 100%, 24% 50%); content: ''; transform: translateY(-50%);
 }
+.cv-shape-controls {
+  position: absolute; z-index: 3; left: 4px; top: 4px; display: flex; align-items: center; gap: 4px;
+  padding: 3px 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transition: opacity .12s;
+}
+.cv-shape:hover .cv-shape-controls { opacity: 1; visibility: visible; }
+.cv-shape-back { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.cv-shape-back:hover { background: var(--surface-2); color: var(--ink); }
+.cv-shape-back .ms { font-size: 18px; }
+.cv-shape-colors { display: flex; align-items: center; gap: 8px; }
+.cv-item-controls .cv-item-colors { display: flex; align-items: center; gap: 8px; }
 .cv-image { background: var(--surface); }
 .cv-image img { display: block; width: 100%; height: auto; border-radius: inherit; cursor: move; touch-action: none; user-select: none; }
 .cv-image.missing { min-height: 80px; }
