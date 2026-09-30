@@ -317,6 +317,20 @@ input[type=search] { width: 100%; margin-bottom: 8px; }
 .cv-note-color[data-color="lavender"] { background: #b79be8; }
 .cv-note-color[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
 .cv-note-color:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.cv-list { min-width: 220px; padding: 6px 10px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.cv-list-handle { height: 24px; margin: -2px -4px 5px; padding: 0 4px; justify-content: flex-start; gap: 7px; color: var(--muted); }
+.cv-list-handle strong { font-size: 12px; font-weight: 600; }
+.cv-list-rows { display: flex; flex-direction: column; gap: 2px; }
+.cv-list-row { display: flex; align-items: flex-start; gap: 4px; min-height: 28px; border-radius: 4px; }
+.cv-list-row.reordering { opacity: .45; }
+.cv-list-marker { width: 23px; min-height: 28px; flex: none; padding: 0; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; font: 14px/1.4 Inter, sans-serif; text-align: center; }
+.cv-list-marker:hover { color: var(--primary); }
+.cv-list-text { flex: 1; min-height: 28px; padding: 4px 2px; border: 0; border-radius: 3px; background: transparent; color: var(--ink); box-shadow: none; resize: none; overflow: hidden; font: 13px/1.45 Inter, sans-serif; touch-action: pan-y; }
+.cv-list-text:focus { border: 0; box-shadow: none; }
+.cv-list-row.crossed .cv-list-text { color: var(--muted); text-decoration: line-through; }
+.cv-list-add { display: grid; place-items: center; width: 24px; height: 24px; margin: 3px 0 0 23px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.cv-list-add:hover { background: var(--surface-2); color: var(--ink); }
+.cv-list-add .ms { font-size: 18px; }
 .cv-wrap.tool-active { cursor: crosshair; }
 .cv-wrap.stamp-active, .cv-wrap.stamp-active .cv-item, .cv-wrap.stamp-active .cv-item * { cursor: copy !important; }
 .cv-wrap.stamp-active .cv-item-controls button, .cv-wrap.stamp-active .cv-del { cursor: pointer !important; }

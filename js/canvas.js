@@ -10,6 +10,7 @@ function mountCanvas(container, projectId) {
   const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 300); };
   let activeTool = null;
   let lastShapeClick = null;
+  let activeRowDrag = null;
 
   const world = h('div', { class: 'cv-world' });
   const zoomLabel = h('span', { class: 'cv-zoom' });
@@ -29,6 +30,7 @@ function mountCanvas(container, projectId) {
     world,
     h('div', { class: 'cv-tools' },
       h('button', { class: 'icon-btn', title: 'Add note', onclick: () => addNoteAtCenter('') }, icon('sticky_note_2')),
+      h('button', { class: 'icon-btn', title: 'Add list', onclick: addListAtCenter }, icon('checklist')),
       h('label', { class: 'icon-btn', title: 'Add image' }, icon('add_photo_alternate'),
         h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true,
           onchange: e => { const c = centerWorld(); [...e.target.files].forEach((f, i) => addImage(f, c.x + i * 30, c.y + i * 30)); e.target.value = ''; } })),
@@ -96,6 +98,43 @@ function mountCanvas(container, projectId) {
     addStamp(activeTool.emoji, point.x - 32, point.y - 32);
   };
   wrap.addEventListener('pointerdown', onStampPointerDown, true);
+
+  wrap.addEventListener('pointermove', e => {
+    const drag = activeRowDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (!drag.dragging && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= 6) {
+      drag.dragging = true;
+      wrap.setPointerCapture(e.pointerId);
+      drag.rowEl.classList.add('reordering');
+      const selection = window.getSelection();
+      if (selection) selection.removeAllRanges();
+    }
+    if (!drag.dragging) return;
+    e.preventDefault();
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cv-list-row');
+    if (!target || target.parentElement !== drag.rowsEl || target === drag.rowEl) return;
+    const from = drag.item.rows.indexOf(drag.row);
+    const targetIndex = [...drag.rowsEl.children].indexOf(target);
+    if (from < 0 || targetIndex < 0) return;
+    const targetRect = target.getBoundingClientRect();
+    const insertAfter = e.clientY > targetRect.top + targetRect.height / 2;
+    let to = targetIndex + (insertAfter ? 1 : 0);
+    if (from < to) to--;
+    if (from === to) return;
+    drag.item.rows.splice(from, 1);
+    drag.item.rows.splice(to, 0, drag.row);
+    drag.rowsEl.insertBefore(drag.rowEl, insertAfter ? target.nextSibling : target);
+    updateListMarkers(drag.item, drag.rowsEl);
+  });
+  const finishListRowDrag = e => {
+    if (!activeRowDrag || activeRowDrag.pointerId !== e.pointerId) return;
+    activeRowDrag.rowEl.classList.remove('reordering');
+    const changedOrder = activeRowDrag.dragging;
+    activeRowDrag = null;
+    if (changedOrder) saveSoon();
+  };
+  wrap.addEventListener('pointerup', finishListRowDrag);
+  wrap.addEventListener('pointercancel', finishListRowDrag);
 
   function applyView() {
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
@@ -237,6 +276,8 @@ function mountCanvas(container, projectId) {
       face.style.fontSize = it.w * 0.82 + 'px';
       el.append(face, del, resize);
       dragBy(face, el, it);
+    } else if (it.type === 'list') {
+      renderList(it, el, del, resize);
     } else if (it.type === 'shape') {
       if (!noteColors.includes(it.color)) it.color = it.shape === 'line' || it.shape === 'arrow' ? 'rose' : 'blue';
       el.dataset.color = it.color;
@@ -267,6 +308,89 @@ function mountCanvas(container, projectId) {
     resizeBy(resize, el, it);
     world.append(el);
     return el;
+  }
+
+  function renderList(it, el, del, resize) {
+    if (!Array.isArray(it.rows) || !it.rows.length) it.rows = [{ text: '', marker: 'circle' }];
+    const handle = h('div', { class: 'cv-handle cv-list-handle' }, icon('drag_indicator'), h('strong', {}, 'List'));
+    const rowsEl = h('div', { class: 'cv-list-rows' });
+    const addRow = (afterRow, shouldFocus, marker = 'circle') => {
+      const row = { text: '', marker };
+      const index = afterRow ? it.rows.indexOf(afterRow) + 1 : it.rows.length;
+      it.rows.splice(index, 0, row);
+      renderListRows(it, rowsEl, addRow, shouldFocus ? row : null);
+      saveSoon();
+    };
+    const addButton = h('button', {
+      class: 'cv-list-add', type: 'button', title: 'Add row', 'aria-label': 'Add row',
+      onclick: () => {
+        const last = it.rows[it.rows.length - 1];
+        addRow(last, true, last.marker === 'number' ? 'number' : 'circle');
+      },
+    }, icon('add'));
+    el.append(handle, rowsEl, addButton, del, resize);
+    renderListRows(it, rowsEl, addRow);
+    dragBy(handle, el, it);
+  }
+
+  function renderListRows(it, rowsEl, addRow, focusRow = null) {
+    rowsEl.replaceChildren();
+    it.rows.forEach((row, index) => {
+      const marker = h('button', {
+        class: 'cv-list-marker', type: 'button', title: 'Change row marker',
+        'aria-label': 'Cycle row marker', onclick: e => {
+          e.stopPropagation();
+          const types = ['circle', 'number', 'cross'];
+          row.marker = types[(types.indexOf(row.marker) + 1) % types.length];
+          updateListMarkers(it, rowsEl);
+          saveSoon();
+        },
+      });
+      const text = h('textarea', {
+        class: 'cv-list-text', rows: '1', placeholder: 'List item', value: row.text,
+        oninput: e => { row.text = e.target.value; growListText(e.target); saveSoon(); },
+        onkeydown: e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            addRow(row, true);
+          } else if (e.key === 'Backspace' && !e.target.value && it.rows.length > 1) {
+            e.preventDefault();
+            const rowIndex = it.rows.indexOf(row);
+            it.rows.splice(rowIndex, 1);
+            renderListRows(it, rowsEl, addRow, true, it.rows[Math.max(0, rowIndex - 1)]);
+            saveSoon();
+          }
+        },
+      });
+      const rowEl = h('div', { class: 'cv-list-row' }, marker, text);
+      text.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || activeRowDrag) return;
+        activeRowDrag = { item: it, row, rowEl, rowsEl, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, dragging: false };
+      });
+      rowsEl.append(rowEl);
+      if (focusRow === row) setTimeout(() => text.focus(), 0);
+    });
+    updateListMarkers(it, rowsEl);
+  }
+
+  function updateListMarkers(it, rowsEl) {
+    let number = 0;
+    [...rowsEl.children].forEach((rowEl, index) => {
+      const row = it.rows[index];
+      const marker = rowEl.querySelector('.cv-list-marker');
+      const text = rowEl.querySelector('.cv-list-text');
+      if (row.marker === 'number') marker.textContent = `${++number}.`;
+      else if (row.marker === 'cross') marker.textContent = '×';
+      else marker.textContent = '•';
+      rowEl.classList.toggle('crossed', row.marker === 'cross');
+      marker.setAttribute('aria-label', `Marker ${row.marker}; click to change`);
+      growListText(text);
+    });
+  }
+
+  function growListText(text) {
+    text.style.height = 'auto';
+    text.style.height = Math.max(28, text.scrollHeight) + 'px';
   }
 
   function dragBy(handle, el, it) {
@@ -390,6 +514,15 @@ function mountCanvas(container, projectId) {
     if (focus) setTimeout(() => el._focus && el._focus(), 20);
   }
   function addNoteAtCenter(text) { const c = centerWorld(); addNote(text, c.x, c.y, !text); }
+
+  function addListAtCenter() {
+    const point = centerWorld();
+    const it = { id: uid(), type: 'list', x: point.x, y: point.y, w: 280, rows: [{ text: '', marker: 'circle' }] };
+    board.items.push(it);
+    const el = renderItem(it);
+    save();
+    setTimeout(() => el.querySelector('.cv-list-text')?.focus(), 20);
+  }
 
   function addStamp(emoji, x, y) {
     const it = { id: uid(), type: 'stamp', emoji, x, y, w: 64, h: 64 };
