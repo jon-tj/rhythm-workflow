@@ -77,13 +77,31 @@ function mountCanvas(container, projectId) {
   }, { passive: false });
 
   // ---- items ----
+  const noteColors = ['yellow', 'rose', 'blue', 'green', 'lavender'];
+
   function renderItem(it) {
     const el = h('div', { class: `cv-item cv-${it.type}`, style: { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px' } });
     const del = h('button', { class: 'cv-del', title: 'Delete', onclick: () => removeItem(it, el) }, icon('close'));
     const resize = h('div', { class: 'cv-resize' });
 
     if (it.type === 'note') {
-      const handle = h('div', { class: 'cv-handle' }, icon('drag_indicator'));
+      if (!noteColors.includes(it.color)) it.color = 'yellow';
+      el.dataset.color = it.color;
+      const handle = h('div', { class: 'cv-handle' },
+        icon('drag_indicator'),
+        h('div', { class: 'cv-note-colors', role: 'group', 'aria-label': 'Note color' },
+          ...noteColors.map(color => h('button', {
+            class: 'cv-note-color', type: 'button', title: `${color} note color`, 'aria-label': `${color} note color`,
+            'aria-pressed': String(it.color === color), 'data-color': color,
+            onclick: e => {
+              e.stopPropagation();
+              it.color = color;
+              el.dataset.color = color;
+              handle.querySelectorAll('.cv-note-color').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
+              saveSoon();
+            },
+          })))
+      );
       const ta = h('textarea', { placeholder: 'Write something…', value: it.text });
       const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
       ta.addEventListener('input', () => { it.text = ta.value; grow(); saveSoon(); });
@@ -104,20 +122,30 @@ function mountCanvas(container, projectId) {
 
   function dragBy(handle, el, it) {
     handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('.cv-note-color')) return;
       e.stopPropagation(); e.preventDefault();
       const sx = e.clientX, sy = e.clientY, ox = it.x, oy = it.y;
-      handle.setPointerCapture(e.pointerId);
       el.classList.add('dragging');
       world.append(el); // bring to front
+      wrap.setPointerCapture(e.pointerId);
       const idx = board.items.indexOf(it);
       board.items.splice(idx, 1); board.items.push(it);
       const move = ev => {
         it.x = ox + (ev.clientX - sx) / view.z; it.y = oy + (ev.clientY - sy) / view.z;
         el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
       };
-      const up = () => { handle.removeEventListener('pointermove', move); el.classList.remove('dragging'); saveSoon(); };
-      handle.addEventListener('pointermove', move);
-      handle.addEventListener('pointerup', up, { once: true });
+      const finish = () => {
+        wrap.removeEventListener('pointermove', move);
+        wrap.removeEventListener('pointerup', finish);
+        wrap.removeEventListener('pointercancel', finish);
+        wrap.removeEventListener('lostpointercapture', finish);
+        el.classList.remove('dragging');
+        saveSoon();
+      };
+      wrap.addEventListener('pointermove', move);
+      wrap.addEventListener('pointerup', finish, { once: true });
+      wrap.addEventListener('pointercancel', finish, { once: true });
+      wrap.addEventListener('lostpointercapture', finish, { once: true });
     });
   }
 
@@ -141,7 +169,7 @@ function mountCanvas(container, projectId) {
   }
 
   function addNote(text, x, y, focus) {
-    const it = { id: uid(), type: 'note', x, y, w: 220, text };
+    const it = { id: uid(), type: 'note', x, y, w: 220, text, color: 'yellow' };
     board.items.push(it);
     const el = renderItem(it);
     save();
