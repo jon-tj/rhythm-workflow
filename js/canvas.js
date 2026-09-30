@@ -144,7 +144,8 @@ function mountCanvas(container, projectId) {
   });
 
   function startShapeDraw(shape, start, pointerId) {
-    const it = { id: uid(), type: 'shape', shape, x: start.x, y: start.y, w: 1, h: 1, angle: 0 };
+    const it = { id: uid(), type: 'shape', shape, x: start.x, y: start.y, w: 1, h: 1, angle: 0,
+      color: shape === 'line' || shape === 'arrow' ? 'rose' : 'blue' };
     board.items.push(it);
     const el = renderItem(it);
     wrap.setPointerCapture(pointerId);
@@ -191,7 +192,7 @@ function mountCanvas(container, projectId) {
   }, { passive: false });
 
   // ---- items ----
-  const noteColors = ['yellow', 'rose', 'blue', 'green', 'lavender'];
+  const noteColors = ['white', 'yellow', 'rose', 'blue', 'green', 'lavender'];
 
   function renderItem(it) {
     const style = { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px' };
@@ -203,7 +204,7 @@ function mountCanvas(container, projectId) {
     const resize = h('div', { class: 'cv-resize' });
 
     if (it.type === 'note') {
-      if (!noteColors.includes(it.color)) it.color = 'yellow';
+      if (!noteColors.includes(it.color)) it.color = 'white';
       el.dataset.color = it.color;
       const colors = h('div', { class: 'cv-item-colors', role: 'group', 'aria-label': 'Note color' },
           ...noteColors.map(color => h('button', {
@@ -237,7 +238,7 @@ function mountCanvas(container, projectId) {
       el.append(face, del, resize);
       dragBy(face, el, it);
     } else if (it.type === 'shape') {
-      if (!noteColors.includes(it.color)) it.color = 'blue';
+      if (!noteColors.includes(it.color)) it.color = it.shape === 'line' || it.shape === 'arrow' ? 'rose' : 'blue';
       el.dataset.color = it.color;
       const face = h('div', { class: `cv-shape-face cv-shape-${it.shape}` });
       const colors = h('div', { class: 'cv-item-colors', role: 'group', 'aria-label': 'Shape color' },
@@ -382,7 +383,7 @@ function mountCanvas(container, projectId) {
   }
 
   function addNote(text, x, y, focus) {
-    const it = { id: uid(), type: 'note', x, y, w: 220, text, color: 'yellow' };
+    const it = { id: uid(), type: 'note', x, y, w: 220, text, color: 'white' };
     board.items.push(it);
     const el = renderItem(it);
     save();
